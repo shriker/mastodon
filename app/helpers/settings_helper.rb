@@ -3,6 +3,7 @@
 module SettingsHelper
   HUMAN_LOCALES = {
     en: 'English',
+    'en-FRL': 'English (Feralkin)',
     ar: 'العربية',
     bg: 'Български',
     ca: 'Català',
