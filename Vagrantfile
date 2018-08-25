@@ -12,7 +12,7 @@ curl -sS https://dl.yarnpkg.com/debian/pubkey.gpg | sudo apt-key add -
 sudo apt-add-repository 'deb https://dl.yarnpkg.com/debian/ stable main'
 
 # Add repo for NodeJS
-curl -sL https://deb.nodesource.com/setup_6.x | sudo bash -
+curl -sL https://deb.nodesource.com/setup_8.x | sudo bash -
 
 # Add firewall rule to redirect 80 to PORT and save
 sudo iptables -t nat -A PREROUTING -p tcp --dport 80 -j REDIRECT --to-port #{ENV["PORT"]}
@@ -39,6 +39,7 @@ sudo apt-get install \
   libidn11-dev \
   libprotobuf-dev \
   libreadline-dev \
+  libpam0g-dev \
   -y
 
 # Install rvm
@@ -48,7 +49,7 @@ curl -sSL https://raw.githubusercontent.com/rvm/rvm/stable/binscripts/rvm-instal
 source /home/vagrant/.rvm/scripts/rvm
 
 # Install Ruby
-rvm install ruby-$RUBY_VERSION
+rvm reinstall ruby-$RUBY_VERSION --disable-binary
 
 # Configure database
 sudo -u postgres createuser -U postgres vagrant -s
@@ -79,7 +80,7 @@ VAGRANTFILE_API_VERSION = "2"
 
 Vagrant.configure(VAGRANTFILE_API_VERSION) do |config|
 
-  config.vm.box = "ubuntu/trusty64"
+  config.vm.box = "ubuntu/xenial64"
 
   config.vm.provider :virtualbox do |vb|
     vb.name = "mastodon"

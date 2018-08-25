@@ -9,15 +9,18 @@ class ApplicationController < ActionController::Base
 
   include Localized
   include UserTrackingConcern
+  include SessionTrackingConcern
 
   helper_method :current_account
   helper_method :current_session
   helper_method :current_theme
   helper_method :single_user_mode?
+  helper_method :use_seamless_external_login?
 
   rescue_from ActionController::RoutingError, with: :not_found
   rescue_from ActiveRecord::RecordNotFound, with: :not_found
   rescue_from ActionController::InvalidAuthenticityToken, with: :unprocessable_entity
+  rescue_from ActionController::UnknownFormat, with: :not_acceptable
   rescue_from Mastodon::NotPermittedError, with: :forbidden
 
   before_action :store_current_location, except: :raise_not_found, unless: :devise_controller?
@@ -34,15 +37,15 @@ class ApplicationController < ActionController::Base
   end
 
   def store_current_location
-    store_location_for(:user, request.url)
+    store_location_for(:user, request.url) unless request.format == :json
   end
 
   def require_admin!
-    redirect_to root_path unless current_user&.admin?
+    forbidden unless current_user&.admin?
   end
 
   def require_staff!
-    redirect_to root_path unless current_user&.staff?
+    forbidden unless current_user&.staff?
   end
 
   def check_suspension
@@ -71,8 +74,16 @@ class ApplicationController < ActionController::Base
     respond_with_error(422)
   end
 
+  def not_acceptable
+    respond_with_error(406)
+  end
+
   def single_user_mode?
     @single_user_mode ||= Rails.configuration.x.single_user_mode && Account.exists?
+  end
+
+  def use_seamless_external_login?
+    Devise.pam_authentication || Devise.ldap_authentication
   end
 
   def current_account
@@ -92,12 +103,8 @@ class ApplicationController < ActionController::Base
     return raw unless klass.respond_to?(:with_includes)
 
     raw                    = raw.cache_ids.to_a if raw.is_a?(ActiveRecord::Relation)
-    uncached_ids           = []
-    cached_keys_with_value = Rails.cache.read_multi(*raw.map(&:cache_key))
-
-    raw.each do |item|
-      uncached_ids << item.id unless cached_keys_with_value.key?(item.cache_key)
-    end
+    cached_keys_with_value = Rails.cache.read_multi(*raw).transform_keys(&:id)
+    uncached_ids           = raw.map(&:id) - cached_keys_with_value.keys
 
     klass.reload_stale_associations!(cached_keys_with_value.values) if klass.respond_to?(:reload_stale_associations!)
 
@@ -105,11 +112,11 @@ class ApplicationController < ActionController::Base
       uncached = klass.where(id: uncached_ids).with_includes.map { |item| [item.id, item] }.to_h
 
       uncached.each_value do |item|
-        Rails.cache.write(item.cache_key, item)
+        Rails.cache.write(item, item)
       end
     end
 
-    raw.map { |item| cached_keys_with_value[item.cache_key] || uncached[item.id] }.compact
+    raw.map { |item| cached_keys_with_value[item.id] || uncached[item.id] }.compact
   end
 
   def respond_with_error(code)
@@ -124,7 +131,6 @@ class ApplicationController < ActionController::Base
 
   def render_cached_json(cache_key, **options)
     options[:expires_in] ||= 3.minutes
-    cache_key              = cache_key.join(':') if cache_key.is_a?(Enumerable)
     cache_public           = options.key?(:public) ? options.delete(:public) : true
     content_type           = options.delete(:content_type) || 'application/json'
 

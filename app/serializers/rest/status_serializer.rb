@@ -3,7 +3,8 @@
 class REST::StatusSerializer < ActiveModel::Serializer
   attributes :id, :created_at, :in_reply_to_id, :in_reply_to_account_id,
              :sensitive, :spoiler_text, :visibility, :language,
-             :uri, :content, :url, :reblogs_count, :favourites_count
+             :uri, :content, :url, :replies_count, :reblogs_count,
+             :favourites_count
 
   attribute :favourited, if: :current_user?
   attribute :reblogged, if: :current_user?
@@ -15,7 +16,7 @@ class REST::StatusSerializer < ActiveModel::Serializer
   belongs_to :account, serializer: REST::AccountSerializer
 
   has_many :media_attachments, serializer: REST::MediaAttachmentSerializer
-  has_many :mentions
+  has_many :ordered_mentions, key: :mentions
   has_many :tags
   has_many :emojis, serializer: REST::CustomEmojiSerializer
 
@@ -84,6 +85,10 @@ class REST::StatusSerializer < ActiveModel::Serializer
       current_user.account_id == object.account_id &&
       !object.reblog? &&
       %w(public unlisted).include?(object.visibility)
+  end
+
+  def ordered_mentions
+    object.mentions.to_a.sort_by(&:id)
   end
 
   class ApplicationSerializer < ActiveModel::Serializer
