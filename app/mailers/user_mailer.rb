@@ -3,6 +3,7 @@
 class UserMailer < Devise::Mailer
   layout 'mailer'
 
+  helper :accounts
   helper :application
   helper :instance
 
@@ -16,7 +17,7 @@ class UserMailer < Devise::Mailer
     return if @resource.disabled?
 
     I18n.with_locale(@resource.locale || I18n.default_locale) do
-      mail to: @resource.unconfirmed_email.blank? ? @resource.email : @resource.unconfirmed_email,
+      mail to: @resource.unconfirmed_email.presence || @resource.email,
            subject: I18n.t(@resource.pending_reconfirmation? ? 'devise.mailer.reconfirmation_instructions.subject' : 'devise.mailer.confirmation_instructions.subject', instance: @instance),
            template_name: @resource.pending_reconfirmation? ? 'reconfirmation_instructions' : 'confirmation_instructions'
     end
@@ -56,6 +57,39 @@ class UserMailer < Devise::Mailer
     end
   end
 
+  def two_factor_enabled(user, **)
+    @resource = user
+    @instance = Rails.configuration.x.local_domain
+
+    return if @resource.disabled?
+
+    I18n.with_locale(@resource.locale || I18n.default_locale) do
+      mail to: @resource.email, subject: I18n.t('devise.mailer.two_factor_enabled.subject')
+    end
+  end
+
+  def two_factor_disabled(user, **)
+    @resource = user
+    @instance = Rails.configuration.x.local_domain
+
+    return if @resource.disabled?
+
+    I18n.with_locale(@resource.locale || I18n.default_locale) do
+      mail to: @resource.email, subject: I18n.t('devise.mailer.two_factor_disabled.subject')
+    end
+  end
+
+  def two_factor_recovery_codes_changed(user, **)
+    @resource = user
+    @instance = Rails.configuration.x.local_domain
+
+    return if @resource.disabled?
+
+    I18n.with_locale(@resource.locale || I18n.default_locale) do
+      mail to: @resource.email, subject: I18n.t('devise.mailer.two_factor_recovery_codes_changed.subject')
+    end
+  end
+
   def welcome(user)
     @resource = user
     @instance = Rails.configuration.x.local_domain
@@ -76,6 +110,19 @@ class UserMailer < Devise::Mailer
 
     I18n.with_locale(@resource.locale || I18n.default_locale) do
       mail to: @resource.email, subject: I18n.t('user_mailer.backup_ready.subject')
+    end
+  end
+
+  def warning(user, warning, status_ids = nil)
+    @resource = user
+    @warning  = warning
+    @instance = Rails.configuration.x.local_domain
+    @statuses = Status.where(id: status_ids).includes(:account) if status_ids.is_a?(Array)
+
+    I18n.with_locale(@resource.locale || I18n.default_locale) do
+      mail to: @resource.email,
+           subject: I18n.t("user_mailer.warning.subject.#{@warning.action}", acct: "@#{user.account.local_username_and_domain}"),
+           reply_to: Setting.site_contact_email
     end
   end
 end
